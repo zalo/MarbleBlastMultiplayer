@@ -247,7 +247,7 @@ export abstract class ResourceManager {
 				try {
 					let response = await fetch(input, init);
 
-					if (response.status === 404) {
+					if (!response.ok) {
 						resolve(null);
 						return;
 					}

@@ -49,6 +49,10 @@ export abstract class Leaderboard {
 				missions: missionPaths
 			})
 		});
+		if (!blob) {
+			missionPaths.forEach(x => this.loading.delete(x));
+			return;
+		}
 		let data: Record<string, [string, number, boolean][]> = await ResourceManager.readBlobAsJson(blob);
 
 		for (let missionPath in data) {
@@ -118,6 +122,7 @@ export abstract class Leaderboard {
 			method: 'POST',
 			body: JSON.stringify(payload)
 		});
+		if (!blob) return;
 		let data: {
 			latestTimestamp: number,
 			scores: Record<string, [string, number, boolean][]>

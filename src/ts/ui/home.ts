@@ -74,7 +74,7 @@ export abstract class HomeScreen {
 
 	async init() {
 		// Fetch and display the version history
-		let blob = await ResourceManager.loadResource('/api/version_history');
+		let blob = await ResourceManager.loadResource('./api/version_history');
 		let text = await ResourceManager.readBlobAsText(blob);
 
 		let latestVersion = /(^|\n)## (\d+\.\d+\.\d+)/.exec(text)[2];

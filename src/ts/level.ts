@@ -1699,7 +1699,7 @@ export class Level extends Scheduler {
 			// Send some analytics to the server
 			if (this.pausedAt !== null) this.analytics.timePaused += Date.now() - this.pausedAt;
 			this.analytics.endTime = Date.now();
-			ResourceManager.retryFetch('/api/statistics', {
+			ResourceManager.retryFetch('./api/statistics', {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'text/plain'

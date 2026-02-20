@@ -57,7 +57,7 @@ export abstract class MissionLibrary {
 		}
 
 		// Get the list of all custom levels
-		let customLevelListPromise = ResourceManager.loadResource('/api/customs');
+		let customLevelListPromise = ResourceManager.loadResource('./api/customs');
 
 		let mbgMisFiles = await Promise.all(mbgPromises);
 		let mbpMisFiles = await Promise.all(mbpPromises);

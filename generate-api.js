@@ -24,4 +24,13 @@ fs.writeFileSync(path.join(apiDir, 'directory_structure'), JSON.stringify(dataSt
 const dataMbpStructure = scanDirectory(path.join(__dirname, 'src', 'assets', 'data_mbp'));
 fs.writeFileSync(path.join(apiDir, 'directory_structure_mbp'), JSON.stringify(dataMbpStructure));
 
-console.log('Generated src/api/directory_structure and src/api/directory_structure_mbp');
+// Empty customs list (no server-side custom levels in static deploy)
+fs.writeFileSync(path.join(apiDir, 'customs'), JSON.stringify([]));
+
+// Copy version_history.md so the home screen can display it
+const versionHistoryPath = path.join(__dirname, 'version_history.md');
+if (fs.existsSync(versionHistoryPath)) {
+	fs.copyFileSync(versionHistoryPath, path.join(apiDir, 'version_history'));
+}
+
+console.log('Generated static API files in src/api/');

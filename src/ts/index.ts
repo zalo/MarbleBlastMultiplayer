@@ -204,13 +204,13 @@ const sendErrors = () => {
 
 const activityId = Util.getRandomId();
 setInterval(() => {
-	fetch('/api/activity?id=' + activityId);
+	fetch('./api/activity?id=' + activityId);
 }, 30000);
 
 // Very basic Service Worker code here:
 if (navigator.serviceWorker) {
-	navigator.serviceWorker.register('/sw.js', {
-		scope: '/'
+	navigator.serviceWorker.register('./sw.js', {
+		scope: './'
 	}).then(reg => {
 		reg.update();
 	}).catch(error => {

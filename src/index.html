@@ -30,6 +30,7 @@
 		<link rel="stylesheet" href="./css/options.css">
 		<link rel="stylesheet" href="./css/options_mbp.css">
 		<link rel="stylesheet" href="./css/hud.css">
+		<link rel="stylesheet" href="./css/multiplayer.css">
 		<link rel="stylesheet" href="./css/touch_controls.css">
 		<link rel="stylesheet" href="./css/pause_screen.css">
 		<link rel="stylesheet" href="./css/pause_screen_mbp.css">
@@ -38,6 +39,75 @@
 		<link rel="stylesheet" href="./css/video_renderer.css">
 	</head>
 	<body>
+		<!-- Hook console.log/warn/error/info immediately so ALL logs are captured -->
+		<script>
+		(function() {
+			var MAX_LINES = 300;
+			var buffer = [];
+			var origLog = console.log.bind(console);
+			var origWarn = console.warn.bind(console);
+			var origError = console.error.bind(console);
+			var origInfo = console.info.bind(console);
+
+			function argsToString(args) {
+				var parts = [];
+				for (var i = 0; i < args.length; i++) {
+					var a = args[i];
+					if (a && typeof a === 'object') {
+						try { parts.push(JSON.stringify(a)); } catch(e) { parts.push(String(a)); }
+					} else {
+						parts.push(String(a));
+					}
+				}
+				return parts.join(' ');
+			}
+
+			function addLine(level, args) {
+				var text = argsToString(args);
+				var entries = document.getElementById('mp-console-entries');
+				if (!entries) {
+					buffer.push({ level: level, text: text });
+					return;
+				}
+				// Flush buffer first
+				if (buffer.length > 0) {
+					for (var i = 0; i < buffer.length; i++) {
+						var b = buffer[i];
+						var el = document.createElement('div');
+						el.className = 'mp-console-line ' + b.level;
+						el.textContent = b.text;
+						entries.appendChild(el);
+					}
+					buffer = [];
+				}
+				var line = document.createElement('div');
+				line.className = 'mp-console-line ' + level;
+				line.textContent = text;
+				entries.appendChild(line);
+				while (entries.children.length > MAX_LINES) {
+					entries.removeChild(entries.firstChild);
+				}
+				entries.scrollTop = entries.scrollHeight;
+			}
+
+			console.log = function() { origLog.apply(console, arguments); addLine('log', arguments); };
+			console.warn = function() { origWarn.apply(console, arguments); addLine('warn', arguments); };
+			console.error = function() { origError.apply(console, arguments); addLine('error', arguments); };
+			console.info = function() { origInfo.apply(console, arguments); addLine('info', arguments); };
+
+			// Also capture unhandled errors and promise rejections
+			window.addEventListener('error', function(e) {
+				addLine('error', ['[Uncaught] ' + e.message + ' at ' + e.filename + ':' + e.lineno]);
+			});
+			window.addEventListener('unhandledrejection', function(e) {
+				addLine('error', ['[Unhandled Promise] ' + String(e.reason)]);
+			});
+
+			// Store originals so Multiplayer class doesn't need to re-hook
+			window.__consoleHooked = true;
+		})();
+		</script>
+
 		<!-- https://stackoverflow.com/questions/18524177/strange-click-event-bubble-on-iphone-safari-that-it-stop-before-bubbling-to-docu -->
 		<div onclick="void 0;" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1000;"></div>
 
@@ -58,8 +128,39 @@
 		<img src="./assets/svg/fullscreen_white_24dp.svg" id="enter-fullscreen" class="hidden">
 		<div id="popup-container" style="display: none;"></div>
 
+		<!-- Console log viewer (always visible, independent of game state) -->
+		<button id="mp-console-toggle">Console</button>
+		<div id="mp-console" class="hidden">
+			<div id="mp-console-header">
+				<span>Console</span>
+				<button id="mp-console-clear">Clear</button>
+			</div>
+			<div id="mp-console-entries"></div>
+		</div>
+		<script>
+		document.getElementById('mp-console-toggle').addEventListener('click', function() {
+			var panel = document.getElementById('mp-console');
+			panel.classList.toggle('hidden');
+		});
+		document.getElementById('mp-console-clear').addEventListener('click', function() {
+			document.getElementById('mp-console-entries').innerHTML = '';
+		});
+		</script>
+
 		<div id="game-ui" class="hidden">
 			<canvas id="hud-canvas"></canvas>
+
+			<!-- Multiplayer player list -->
+			<div id="mp-player-list">
+				<div id="mp-player-list-header">Players</div>
+				<div id="mp-player-list-entries"></div>
+			</div>
+
+			<!-- Skin picker (collapsible) -->
+			<div id="mp-skin-picker-container">
+				<button id="mp-skin-picker-toggle">Skin</button>
+				<div id="mp-skin-picker"></div>
+			</div>
 
 			<div id="touch-input-container">
 				<div id="movement-area"></div>

@@ -10,3 +10,4 @@ todo.txt
 .rpt2_cache
 .vscode
 **/*.DS_STORE
+party/.partykit/

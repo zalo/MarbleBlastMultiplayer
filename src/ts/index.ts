@@ -68,7 +68,8 @@ const init = async () => {
 		mainAudioManager.context.resume();
 		state.menu.show();
 
-		maybeLaunchLevelFromQueryParams(new URLSearchParams(window.location.search));
+		// Auto-start the first beginner level, skipping menus
+		autoStartFirstLevel();
 	};
 
 	loadingMessage.style.display = 'none';
@@ -122,6 +123,18 @@ const maybeLaunchLevelFromQueryParams = async (urlParams: URLSearchParams) => {
 	}
 
 	state.menu.home.changelogContainer.classList.add('hidden'); // No need to show version history when directly launching into the mission
+	state.menu.home.hide();
+	state.menu.levelSelect.show();
+	state.menu.levelSelect.hide();
+	state.menu.loadingScreen.loadLevel(missionToPlay, undefined);
+};
+
+/** Auto-start the first beginner level, skipping all menus */
+const autoStartFirstLevel = async () => {
+	let missionToPlay = MissionLibrary.goldBeginner[0];
+	if (!missionToPlay) return;
+
+	state.menu.home.changelogContainer?.classList.add('hidden');
 	state.menu.home.hide();
 	state.menu.levelSelect.show();
 	state.menu.levelSelect.hide();

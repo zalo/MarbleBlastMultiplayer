@@ -1,0 +1,6 @@
+{
+  "name": "marble-blast-party",
+  "main": "server.js",
+  "compatibilityDate": "2024-12-06",
+  "port": 1999
+}

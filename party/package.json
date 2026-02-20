@@ -1,0 +1,13 @@
+{
+  "name": "marble-blast-party",
+  "version": "1.0.0",
+  "description": "PartyKit multiplayer server for Marble Blast",
+  "scripts": {
+    "dev": "npx partykit dev",
+    "deploy": "npx partykit deploy"
+  },
+  "dependencies": {
+    "partykit": "^0.0.115",
+    "partysocket": "^1.1.4"
+  }
+}

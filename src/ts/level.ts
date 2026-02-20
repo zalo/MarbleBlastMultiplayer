@@ -72,6 +72,7 @@ import { OrthographicCamera, PerspectiveCamera } from "./rendering/camera";
 import { Plane } from "./math/plane";
 import { CollisionDetection } from "./physics/collision_detection";
 import { MissionLibrary } from "./mission_library";
+import { Multiplayer } from "./multiplayer";
 import hxDif from './parsing/hx_dif';
 
 /** How often the physics will be updated, per second. */
@@ -243,6 +244,7 @@ export class Level extends Scheduler {
 	checkpointUp: Vector3 = null;
 	checkpointBlast: number = null;
 
+	multiplayer: Multiplayer;
 	audio: AudioManager;
 	timeTravelSound: AudioSource;
 	/** The alarm that plays in MBP when the player is about to pass the "par time". */
@@ -327,6 +329,11 @@ export class Level extends Scheduler {
 		await this.addSimGroup(this.mission.root);
 		await this.initUi(); this.loadingState.loaded += 3;
 		await soundPromise; this.loadingState.loaded += 6;
+
+		// Initialize multiplayer ghost marbles before scene compile
+		this.multiplayer = new Multiplayer(this);
+		await this.multiplayer.initGhostMarbles(this.scene);
+
 		this.scene.compile(); this.loadingState.loaded += 1;
 
 		this.replay = new Replay(this);
@@ -351,6 +358,10 @@ export class Level extends Scheduler {
 			this.tickInterval = setInterval(this.tick.bind(this)) as unknown as number;
 			this.lastPhysicsTick = performance.now(); // First render usually takes longer (JIT moment), so reset the last physics tick back to now
 			mainCanvas.classList.remove('hidden');
+
+			// Connect to PartyKit multiplayer server (same hostname as page, port 7648)
+			let partyHost = window.location.hostname + ':7648';
+			this.multiplayer.connect(partyHost, 'marble-blast-room');
 		}
 	}
 
@@ -952,6 +963,12 @@ export class Level extends Scheduler {
 		for (let interior of this.interiors) interior.render(tempTimeState);
 		for (let shape of this.shapes) shape.render(tempTimeState);
 		this.particles.render(tempTimeState.timeSinceLoad);
+
+		// Send local marble state and update remote player positions
+		if (this.multiplayer) {
+			this.multiplayer.sendUpdate();
+			this.multiplayer.updateGhostMarbles(completion);
+		}
 
 		this.updateCamera(tempTimeState);
 		this.camera.updateMatrixWorld();
@@ -1694,6 +1711,7 @@ export class Level extends Scheduler {
 
 	/** Disposes the GPU assets used by the level. */
 	dispose() {
+		if (this.multiplayer) this.multiplayer.dispose();
 		this.scene.dispose();
 		this.marble.dispose();
 		mainRenderer.cleanUp();

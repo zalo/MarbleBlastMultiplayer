@@ -1,32 +1,104 @@
-# Marble Blast Web
-This project is a clean-room web port of the 3D platformer games Marble Blast Gold and Marble Blast Platinum (including Marble Blast Ultra), implemented in TypeScript.
+# Marble Blast Multiplayer
+A multiplayer fork of [Marble Blast Web](https://github.com/Vanilagy/MarbleBlast) — the clean-room TypeScript web port of Marble Blast Gold and Marble Blast Platinum.
 
-Play it here: https://marbleblast.vaniverse.io/<br>
-TAS Rewind version here: https://github.com/RandomityGuy/MBG-Web-Rewind
+This fork adds real-time LAN multiplayer so you and your friends can roll around the same level together, bump each other off platforms, and pick custom marble skins.
 
-## Features
-In this game, the objective is to roll your marble to the finish pad in the fastest time possible, while avoiding hazards and collecting gems and power-ups. It includes almost 4000 levels, including 220 original MBG/MBP/MBU levels (69 beginner, 79 intermediate, 108 advanced, 25 expert) and more than 3900 community custom levels. It implements all gameplay elements, sounds, music and UI/menu components from both Marble Blast Gold, Platinum and Ultra - additional features include a replay system and online leaderboards. The two games (Gold/Platinum) can be switched between seamlessly and without reloading in the main menu. The game can be played using a keyboard, mouse, gamepad or on your mobile device.
+## Multiplayer Features
+- **Real-time multiplayer** via [PartyKit](https://partykit.io/) WebSocket server
+- **Player collision** — marbles physically bump each other with elastic collision
+- **Skin picker** — choose from 16 marble skins, synced across all players
+- **Player list** — see who's online in the top-right corner
+- **Debug console** — toggle a live console log overlay for troubleshooting
+- **Auto-start** — drops straight into the first level, no menu navigation needed
+- **Mobile support** — works on phones over LAN with fast WebSocket retry
 
-[View version history](https://github.com/Vanilagy/MarbleBlast/blob/master/version_history.md)
+## Setup
 
-## Screenshots
-<img src="./screenshots/natural_selection.png" width="640">
-<img src="./screenshots/king_of_the_marble.png" width="640">
-<img src="./screenshots/whirl.png" width="640">
-<img src="./screenshots/mobile.jpg" width="640">
-<img src="./screenshots/twisting.png" width="640">
-<img src="./screenshots/marble_mini_golf_smorgasbord.png" width="640">
-<img src="./screenshots/avi_training_2.png" width="640">
-<img src="./screenshots/mbp_level_select.png" width="640">
-<img src="./screenshots/mbg_options.png" width="640">
+### Prerequisites
+- Node.js (v18+)
+- npm
+- `node-gyp` installed globally: `npm install -g node-gyp`
+  - On Windows, also run `npm install --global --production windows-build-tools` in an elevated command prompt
 
-## Technical overview
-The game is fully implemented in TypeScript and utilizes its own custom rendering and physics engine. Its levels and assets weren't rebuilt from scratch; instead, they are read and imported from .dif, .dts and .mis files used internally by the Torque 3D Engine, on which the original game runs. All the game's internal logic was implemented from scratch, however. The physics simulation runs at a fixed rate of 120 Hz and utilizes continuous collision detection - it was tuned to feel like a Marble Blast game, but there are still differences in the physics, because of which times in this game shouldn't be compared to those in the original. Resources are lazily loaded over the network when required for levels, making the initial load time of the website relatively short. The UIs are all implemented in plain HTML and CSS, and local persistence for settings, scores and replays is provided by IndexedDB. The game features a state-based replay system which guarantees deterministic playback - replays are compressed using [pako](https://github.com/nodeca/pako) and stored locally. Custom levels are supplied by [Marbleland](https://github.com/Vanilagy/Marbleland) and are cached on the server. The backend itself is implemented using Node.js and mostly handles resource loading and leaderboard updates. An SQLite database is used to store online scores. The built-in video renderer is implemented using the WebCodecs API and [my own multiplexing library](https://github.com/Vanilagy/webm-muxer).
+### Install
 
-## Building and developing
-If you wish to build the game yourself, simply clone the repository, then run `npm install --legacy-peer-deps` and `npm run compile`, which will compile the TypeScript code using [rollup](https://rollupjs.org/guide/en/). Then run `npm start` to start up the server (runs on :8080 by default). If you want to configure the port and other server options, modify `server/data/config.json`. For fast development run `npm run watch-fast` (or `npm run watch` for a slower, but typechecked version). If you wish to bundle the project, run `npm run bundle`, which uses [Sarcina](https://github.com/Vanilagy/Sarcina) and writes to `dist/`.
+```bash
+# Clone the repo
+git clone https://github.com/zalo/MarbleBlastMultiplayer.git
+cd MarbleBlastMultiplayer
 
-**Note:** This project has a dependency that requires `node-gyp`. Install `node-gyp` _before_ running `npm install` on this project with `npm install -g node-gyp`, and if you're on Windows, make sure to run `npm install --global --production windows-build-tools` right afterwards in an _elevated command prompt_ (one with admin rights) to handle the annoying installation stuff.
+# Install game dependencies
+npm install --legacy-peer-deps
 
-## Notes
-The current version only runs on the newest versions of Chromium-based browsers, Firefox and Safari, both on desktop and on mobile. Android support should be top-notch, and Safari is as best as it can be given Apple's restrictive PWA features on iOS. Older versions of this project utilized [three.js](https://github.com/mrdoob/three.js/) for rendering and [OimoPhysics](https://github.com/saharan/OimoPhysics) for physics - without them, this project wouldn't even exist. Additional thanks to the maintainers of [pako](https://github.com/nodeca/pako) and [jszip](https://github.com/Stuk/jszip) for making other parts of this project possible, as well as to [Jeff](https://github.com/JeffProgrammer), [RandomityGuy](https://github.com/RandomityGuy) and [Whirligig](https://github.com/Whirligig231) for helping me out with parts of the code, and to the entire Marble Blast community for their feedback and support. The gameplay itself wasn't my idea at all and I highly recommend you check out GarageGames's original version of Marble Blast Gold, as well as the game's community, here: https://marbleblast.com/
+# Install PartyKit server dependencies
+cd party
+npm install
+cd ..
+```
+
+### Build
+
+```bash
+npm run compile
+```
+
+This compiles the TypeScript source into `src/js/bundle.js` and `server/bundle.js` using Rollup.
+
+For development with auto-rebuild on changes:
+```bash
+npm run watch-fast
+```
+
+### Run
+
+You need to start **two servers** — the game server and the PartyKit multiplayer server:
+
+**Terminal 1 — Game server** (serves the web page and assets):
+```bash
+npm start
+```
+This starts the game server on port 1324 (configurable in `server/data/config.json`).
+
+**Terminal 2 — PartyKit multiplayer server** (handles WebSocket connections):
+```bash
+cd party
+npx partykit dev --port 7648
+```
+
+### Connect
+
+1. Open `http://localhost:1324` in your browser — the game auto-starts the first level
+2. To play with others on your LAN, have them open `http://<your-ip>:1324`
+3. Find your IP with `ip addr` (Linux), `ipconfig` (Windows), or `ifconfig` (macOS)
+
+The multiplayer client automatically connects to the PartyKit server on port 7648 using the same hostname as the page.
+
+### Ports Summary
+
+| Service | Default Port | Config |
+|---------|-------------|--------|
+| Game server | 1324 | `server/data/config.json` |
+| PartyKit server | 7648 | `--port` flag on `npx partykit dev` |
+
+Both ports must be accessible to other players on your network.
+
+## Controls
+
+Use the skin picker button (top-left) to choose your marble skin. The debug console toggle is in the bottom-left corner.
+
+All standard Marble Blast controls apply — arrow keys or WASD to move, mouse to look, space to jump.
+
+## Architecture
+
+The multiplayer system consists of:
+
+- **`party/server.js`** — PartyKit server that relays position/orientation/velocity updates between players and runs server-side sphere-sphere collision detection with elastic impulse response
+- **`src/ts/multiplayer.ts`** — Client module that manages WebSocket connection, ghost marble rendering with entity interpolation, skin synchronization, and UI (player list, skin picker, console)
+- **`src/css/multiplayer.css`** — Styles for the multiplayer UI overlay
+
+Ghost marbles are pre-allocated before the scene compiles (the engine bakes meshes into VBOs at compile time), and textures are swapped at runtime for skin changes.
+
+## Credits
+
+- Original [Marble Blast Web](https://github.com/Vanilagy/MarbleBlast) by [Vanilagy](https://github.com/Vanilagy)
+- Multiplayer fork by [zalo](https://github.com/zalo)

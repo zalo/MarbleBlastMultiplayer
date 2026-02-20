@@ -9,6 +9,7 @@ const COLLISION_RESTITUTION = 0.6;
  * PartyKit server for Marble Blast multiplayer.
  * Syncs marble positions, orientations, and skin choices between all connected players.
  * Handles sphere-sphere collision between players for mutual bumping.
+ * The first player to connect is the "host" and can change levels for everyone.
  */
 export default class MarblePartyServer {
   constructor(room) {
@@ -20,9 +21,17 @@ export default class MarblePartyServer {
      * @type {Record<string, { position: Vec3, orientation: Quat, velocity: Vec3, skinIndex: number }>}
      */
     this.players = {};
+
+    /** The connection ID of the host (first player to connect). */
+    this.hostId = null;
   }
 
   onConnect(conn) {
+    // First player to connect becomes the host
+    if (this.hostId === null || !this.players[this.hostId]) {
+      this.hostId = conn.id;
+    }
+
     this.players[conn.id] = {
       position: { x: 0, y: 0, z: 0 },
       orientation: { x: 0, y: 0, z: 0, w: 1 },
@@ -30,10 +39,11 @@ export default class MarblePartyServer {
       skinIndex: 0
     };
 
-    // Send the new player their ID and the current state of all players
+    // Send the new player their ID, host status, and the current state of all players
     conn.send(JSON.stringify({
       type: 'init',
       id: conn.id,
+      isHost: conn.id === this.hostId,
       players: this.players
     }));
 
@@ -72,6 +82,18 @@ export default class MarblePartyServer {
         orientation: player.orientation,
         velocity: player.velocity,
         skinIndex: player.skinIndex
+      }), [sender.id]);
+    }
+
+    if (data.type === 'level_change') {
+      // Only the host can change levels for everyone
+      if (sender.id !== this.hostId) return;
+
+      // Broadcast level change to all OTHER players (host already loaded it)
+      this.room.broadcast(JSON.stringify({
+        type: 'level_change',
+        missionPath: data.missionPath,
+        modification: data.modification
       }), [sender.id]);
     }
   }
@@ -140,6 +162,22 @@ export default class MarblePartyServer {
 
   onClose(conn) {
     delete this.players[conn.id];
+
+    // If the host disconnected, promote the next player
+    if (conn.id === this.hostId) {
+      const remaining = Object.keys(this.players);
+      this.hostId = remaining.length > 0 ? remaining[0] : null;
+
+      // Notify the new host
+      if (this.hostId) {
+        for (const other of this.room.getConnections()) {
+          if (other.id === this.hostId) {
+            other.send(JSON.stringify({ type: 'host_promoted' }));
+            break;
+          }
+        }
+      }
+    }
 
     this.room.broadcast(JSON.stringify({
       type: 'player_left',

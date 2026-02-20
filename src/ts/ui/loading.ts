@@ -62,6 +62,13 @@ export abstract class LoadingScreen {
 				this.progressBar.style.width = (completion * this.maxProgressBarWidth) + 'px';
 			}) as unknown as number;
 
+			// Stop the old level's game loops and audio without disposing GPU resources.
+			// Using softStop() instead of stop() avoids destroying shaders/buffers that
+			// can interfere with the new level's rendering (skin textures, ball size).
+			if (state.level) {
+				state.level.softStop();
+			}
+
 			let level = new Level(mission);
 			state.level = level;
 			await level.init();

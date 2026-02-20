@@ -8,6 +8,8 @@ import { Level } from "./level";
 import { Vector3 } from "./math/vector3";
 import { Quaternion } from "./math/quaternion";
 import { ResourceManager } from "./resources";
+import { MissionLibrary } from "./mission_library";
+import { state } from "./state";
 
 const MAX_REMOTE_PLAYERS = 8;
 const SEND_RATE_MS = 1000 / 30; // 30 Hz position updates
@@ -56,6 +58,8 @@ interface RemotePlayerState {
 	prevTime: number;
 	skinIndex: number;
 	ghostIndex: number;
+	/** False until the first real position update arrives for this level. */
+	hasUpdate: boolean;
 }
 
 interface GhostMarble {
@@ -66,17 +70,157 @@ interface GhostMarble {
 }
 
 /**
- * Manages multiplayer connectivity via PartyKit.
- * Pre-allocates ghost marbles that get added to the scene before compile.
+ * Persistent multiplayer connection that survives across level loads.
+ * Manages the WebSocket, player list, and level sync.
+ */
+class MultiplayerConnection {
+	socket: WebSocket = null;
+	myId: string = null;
+	connected = false;
+	isHost = false;
+	host: string = null;
+	room: string = null;
+	/** Remote player data keyed by connection ID. Kept in sync across level loads. */
+	remotePlayers: Map<string, any> = new Map();
+	/** Callback for when a level change is received from the host. */
+	onLevelChange: (missionPath: string, modification: string) => void = null;
+
+	connect(host: string, room: string) {
+		this.host = host;
+		this.room = room;
+		let protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+		let url = `${protocol}://${host}/party/${room}`;
+		this.attemptConnect(url, 0);
+	}
+
+	private attemptConnect(url: string, attempt: number) {
+		try {
+			console.log(`[Multiplayer] Connecting to ${url} (attempt ${attempt + 1})`);
+			let socketOpened = false;
+			let socket = new WebSocket(url);
+			this.socket = socket;
+
+			let retryTimeout = setTimeout(() => {
+				if (!socketOpened && socket.readyState === WebSocket.CONNECTING) {
+					console.warn(`[Multiplayer] Attempt ${attempt + 1} hung for 3s, retrying...`);
+					socket.onopen = null;
+					socket.onclose = null;
+					socket.onerror = null;
+					socket.onmessage = null;
+					socket.close();
+					if (attempt < 5) {
+						this.attemptConnect(url, attempt + 1);
+					}
+				}
+			}, 3000);
+
+			socket.onopen = () => {
+				socketOpened = true;
+				clearTimeout(retryTimeout);
+				this.connected = true;
+				console.log('[Multiplayer] Connected to party server');
+			};
+
+			socket.onmessage = (event) => {
+				this.handleMessage(event.data);
+			};
+
+			socket.onclose = (event) => {
+				clearTimeout(retryTimeout);
+				if (!socketOpened) {
+					console.warn('[Multiplayer] Connection failed. code:', event.code);
+				} else {
+					this.connected = false;
+					console.log('[Multiplayer] Disconnected. code:', event.code, 'wasClean:', event.wasClean);
+				}
+				if (this.socket === socket) {
+					setTimeout(() => {
+						this.connect(this.host, this.room);
+					}, 3000);
+				}
+			};
+
+			socket.onerror = () => {
+				console.error('[Multiplayer] WebSocket error. readyState:', socket.readyState);
+			};
+		} catch (e) {
+			console.error('[Multiplayer] Failed to create WebSocket:', e);
+		}
+	}
+
+	private handleMessage(data: string) {
+		let msg: any;
+		try {
+			msg = JSON.parse(data);
+		} catch {
+			return;
+		}
+
+		switch (msg.type) {
+			case 'init':
+				this.myId = msg.id;
+				this.isHost = msg.isHost;
+				this.remotePlayers.clear();
+				for (let [id, player] of Object.entries(msg.players)) {
+					if (id !== this.myId) this.remotePlayers.set(id, player);
+				}
+				console.log(`[Multiplayer] Initialized as ${this.isHost ? 'HOST' : 'client'}, id: ${this.myId}`);
+				break;
+			case 'player_joined':
+				if (msg.id !== this.myId) this.remotePlayers.set(msg.id, msg.player);
+				break;
+			case 'player_update':
+				if (this.remotePlayers.has(msg.id)) {
+					let p = this.remotePlayers.get(msg.id);
+					p.position = msg.position;
+					p.orientation = msg.orientation;
+					p.velocity = msg.velocity;
+					if (msg.skinIndex !== undefined) p.skinIndex = msg.skinIndex;
+				}
+				break;
+			case 'player_left':
+				this.remotePlayers.delete(msg.id);
+				break;
+			case 'level_change':
+				if (this.onLevelChange) {
+					this.onLevelChange(msg.missionPath, msg.modification);
+				}
+				break;
+			case 'host_promoted':
+				this.isHost = true;
+				console.log('[Multiplayer] You are now the host');
+				break;
+		}
+
+		// Forward all messages to the active level's multiplayer instance
+		if (state.level?.multiplayer) {
+			state.level.multiplayer.handleMessage(msg);
+		}
+	}
+
+	send(data: any) {
+		if (!this.connected || !this.socket || this.socket.readyState !== WebSocket.OPEN) return;
+		this.socket.send(JSON.stringify(data));
+	}
+
+	/** Tell the server (and all other clients) to load a new level. Only works for the host. */
+	sendLevelChange(missionPath: string, modification: string) {
+		this.send({ type: 'level_change', missionPath, modification });
+	}
+}
+
+/** Singleton connection that persists across level loads. */
+export const mpConnection = new MultiplayerConnection();
+
+/**
+ * Per-level multiplayer instance.
+ * Manages ghost marbles, skin picker, and position sync for the current level.
  */
 export class Multiplayer {
 	level: Level;
-	socket: WebSocket;
-	myId: string = null;
 	remotePlayers: Map<string, RemotePlayerState> = new Map();
 	ghostMarbles: GhostMarble[] = [];
 	lastSendTime = 0;
-	connected = false;
 
 	/** All pre-loaded skin textures, indexed by skin index. */
 	skinTextures: Texture[] = [];
@@ -135,102 +279,68 @@ export class Multiplayer {
 		this.initUI();
 	}
 
-	/** Connect to the PartyKit server with fast retry for slow mobile connections. */
-	connect(host: string, room: string) {
-		let protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-		let url = `${protocol}://${host}/party/${room}`;
-		this.attemptConnect(url, host, room, 0);
-	}
+	/** Called when the level starts — sync existing players and notify server of level change. */
+	onLevelStart() {
+		// Re-apply saved skin
+		this.applyLocalSkin(this.mySkinIndex);
 
-	private attemptConnect(url: string, host: string, room: string, attempt: number) {
-		try {
-			console.log(`[Multiplayer] Connecting to ${url} (attempt ${attempt + 1})`);
-			let socketOpened = false;
-			let socket = new WebSocket(url);
-			this.socket = socket;
+		// Seed ghost marbles with players already known to the persistent connection.
+		// Hide them until real position data arrives for this level.
+		for (let [id, playerData] of mpConnection.remotePlayers) {
+			if (!this.remotePlayers.has(id)) {
+				this.addRemotePlayer(id, playerData, true);
+			}
+		}
+		this.updatePlayerList();
 
-			let retryTimeout = setTimeout(() => {
-				if (!socketOpened && socket.readyState === WebSocket.CONNECTING) {
-					console.warn(`[Multiplayer] Attempt ${attempt + 1} hung for 3s, retrying...`);
-					socket.onopen = null;
-					socket.onclose = null;
-					socket.onerror = null;
-					socket.onmessage = null;
-					socket.close();
-					if (attempt < 5 && !this.level.stopped) {
-						this.attemptConnect(url, host, room, attempt + 1);
-					}
-				}
-			}, 3000);
-
-			socket.onopen = () => {
-				socketOpened = true;
-				clearTimeout(retryTimeout);
-				this.connected = true;
-				console.log('[Multiplayer] Connected to party server');
-				this.updatePlayerList();
-			};
-
-			socket.onmessage = (event) => {
-				this.handleMessage(event.data);
-			};
-
-			socket.onclose = (event) => {
-				clearTimeout(retryTimeout);
-				if (!socketOpened) {
-					console.warn('[Multiplayer] Connection failed. code:', event.code);
-				} else {
-					this.connected = false;
-					console.log('[Multiplayer] Disconnected. code:', event.code, 'wasClean:', event.wasClean);
-				}
-				this.updatePlayerList();
-				if (this.socket === socket) {
-					setTimeout(() => {
-						if (!this.level.stopped) this.connect(host, room);
-					}, 3000);
-				}
-			};
-
-			socket.onerror = () => {
-				console.error('[Multiplayer] WebSocket error. readyState:', socket.readyState);
-			};
-		} catch (e) {
-			console.error('[Multiplayer] Failed to create WebSocket:', e);
+		// If we're the host, tell everyone to load this level
+		if (mpConnection.isHost) {
+			let mission = this.level.mission;
+			mpConnection.sendLevelChange(mission.path, mission.modification);
 		}
 	}
 
-	private handleMessage(data: string) {
-		let msg: any;
-		try {
-			msg = JSON.parse(data);
-		} catch {
-			return;
-		}
-
+	/** Handle a parsed message from the persistent connection. */
+	handleMessage(msg: any) {
 		switch (msg.type) {
 			case 'init': {
-				this.myId = msg.id;
 				for (let [id, player] of Object.entries(msg.players)) {
-					if (id === this.myId) continue;
+					if (id === mpConnection.myId) continue;
 					this.addRemotePlayer(id, player as any);
 				}
+				this.updatePlayerList();
 				break;
 			}
 			case 'player_joined': {
-				if (msg.id === this.myId) break;
+				if (msg.id === mpConnection.myId) break;
 				this.addRemotePlayer(msg.id, msg.player);
 				break;
 			}
 			case 'player_update': {
 				let remote = this.remotePlayers.get(msg.id);
 				if (!remote) break;
-				remote.prevPosition = { ...remote.targetPosition };
-				remote.prevOrientation = { ...remote.targetOrientation };
-				remote.prevTime = remote.targetTime;
-				remote.targetPosition = msg.position;
-				remote.targetOrientation = msg.orientation;
-				remote.velocity = msg.velocity;
-				remote.targetTime = performance.now();
+
+				if (!remote.hasUpdate) {
+					// First real update for this level — snap to position and reveal
+					remote.prevPosition = { ...msg.position };
+					remote.targetPosition = { ...msg.position };
+					remote.prevOrientation = { ...msg.orientation };
+					remote.targetOrientation = { ...msg.orientation };
+					remote.velocity = msg.velocity;
+					remote.prevTime = performance.now();
+					remote.targetTime = performance.now();
+					remote.hasUpdate = true;
+					this.ghostMarbles[remote.ghostIndex].mesh.opacity = 1;
+				} else {
+					remote.prevPosition = { ...remote.targetPosition };
+					remote.prevOrientation = { ...remote.targetOrientation };
+					remote.prevTime = remote.targetTime;
+					remote.targetPosition = msg.position;
+					remote.targetOrientation = msg.orientation;
+					remote.velocity = msg.velocity;
+					remote.targetTime = performance.now();
+				}
+
 				// Update skin if changed
 				if (msg.skinIndex !== undefined && msg.skinIndex !== remote.skinIndex) {
 					remote.skinIndex = msg.skinIndex;
@@ -245,7 +355,7 @@ export class Multiplayer {
 			case 'collision': {
 				if (!msg.pairs) break;
 				for (let pair of msg.pairs) {
-					if (pair.id === this.myId) {
+					if (pair.id === mpConnection.myId) {
 						// Apply correction to local marble
 						let marble = this.level.marble;
 						if (marble && marble.body) {
@@ -270,7 +380,7 @@ export class Multiplayer {
 		}
 	}
 
-	private addRemotePlayer(id: string, playerData: any) {
+	private addRemotePlayer(id: string, playerData: any, hidden = false) {
 		let ghostIndex = -1;
 		for (let i = 0; i < this.ghostMarbles.length; i++) {
 			if (!this.ghostMarbles[i].active) {
@@ -281,29 +391,31 @@ export class Multiplayer {
 		if (ghostIndex === -1) return;
 
 		this.ghostMarbles[ghostIndex].active = true;
-		this.ghostMarbles[ghostIndex].mesh.opacity = 1;
+		// If hidden (seeded from previous level), keep invisible until first real update
+		this.ghostMarbles[ghostIndex].mesh.opacity = hidden ? 0 : 1;
 
-		let pos = playerData.position || { x: 0, y: 0, z: 0 };
-		let ori = playerData.orientation || { x: 0, y: 0, z: 0, w: 1 };
 		let skinIndex = playerData.skinIndex || 0;
 		let now = performance.now();
+		let zero = { x: 0, y: 0, z: 0 };
+		let identityOri = { x: 0, y: 0, z: 0, w: 1 };
 
 		this.remotePlayers.set(id, {
-			prevPosition: { ...pos },
-			prevOrientation: { ...ori },
-			targetPosition: { ...pos },
-			targetOrientation: { ...ori },
-			velocity: playerData.velocity || { x: 0, y: 0, z: 0 },
+			prevPosition: { ...zero },
+			prevOrientation: { ...identityOri },
+			targetPosition: { ...zero },
+			targetOrientation: { ...identityOri },
+			velocity: { ...zero },
 			prevTime: now,
 			targetTime: now,
 			skinIndex,
-			ghostIndex
+			ghostIndex,
+			hasUpdate: !hidden
 		});
 
 		// Apply the remote player's chosen skin to their ghost marble
 		this.applyGhostSkin(ghostIndex, skinIndex);
 
-		console.log(`[Multiplayer] Player joined: ${id} (ghost ${ghostIndex}, skin ${skinIndex})`);
+		console.log(`[Multiplayer] Player joined: ${id} (ghost ${ghostIndex}, skin ${skinIndex}${hidden ? ', hidden' : ''})`);
 		this.updatePlayerList();
 	}
 
@@ -334,8 +446,6 @@ export class Multiplayer {
 
 	/** Send local marble state to the server. */
 	sendUpdate() {
-		if (!this.connected || !this.socket || this.socket.readyState !== WebSocket.OPEN) return;
-
 		let now = performance.now();
 		if (now - this.lastSendTime < SEND_RATE_MS) return;
 		this.lastSendTime = now;
@@ -347,13 +457,13 @@ export class Multiplayer {
 		let ori = marble.body.orientation;
 		let vel = marble.body.linearVelocity;
 
-		this.socket.send(JSON.stringify({
+		mpConnection.send({
 			type: 'update',
 			position: { x: pos.x, y: pos.y, z: pos.z },
 			orientation: { x: ori.x, y: ori.y, z: ori.z, w: ori.w },
 			velocity: { x: vel.x, y: vel.y, z: vel.z },
 			skinIndex: this.mySkinIndex
-		}));
+		});
 	}
 
 	/** Update ghost marble positions with smooth entity interpolation. */
@@ -443,7 +553,13 @@ export class Multiplayer {
 		let toggle = document.getElementById('mp-skin-picker-toggle');
 		if (!picker || !container || !toggle) return;
 
-		// Toggle expand/collapse
+		// Clear any existing skin options from a previous level load
+		picker.innerHTML = '';
+
+		// Replace toggle to remove old event listeners
+		let newToggle = toggle.cloneNode(true) as HTMLElement;
+		toggle.replaceWith(newToggle);
+		toggle = newToggle;
 		toggle.addEventListener('click', () => {
 			container.classList.toggle('expanded');
 		});
@@ -486,8 +602,8 @@ export class Multiplayer {
 		let selfEntry = document.createElement('div');
 		selfEntry.className = 'mp-player-entry';
 		selfEntry.innerHTML = `
-			<span class="mp-player-dot ${this.connected ? 'online' : 'offline'}"></span>
-			<span class="mp-player-name you">You</span>
+			<span class="mp-player-dot ${mpConnection.connected ? 'online' : 'offline'}"></span>
+			<span class="mp-player-name you">You${mpConnection.isHost ? ' (Host)' : ''}</span>
 		`;
 		container.appendChild(selfEntry);
 
@@ -503,13 +619,8 @@ export class Multiplayer {
 		}
 	}
 
-	/** Clean up on level exit. */
+	/** Clean up on level exit. Does NOT close the WebSocket (connection persists). */
 	dispose() {
-		if (this.socket) {
-			this.socket.close();
-			this.socket = null;
-		}
-		this.connected = false;
 		this.remotePlayers.clear();
 	}
 }

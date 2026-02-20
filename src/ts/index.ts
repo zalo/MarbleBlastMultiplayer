@@ -8,6 +8,7 @@ import { MissionLibrary } from './mission_library';
 import { state } from './state';
 import { setMenu } from './ui/menu_setter';
 import { initMainRenderer } from './ui/misc';
+import { mpConnection } from './multiplayer';
 
 const loadingMessage = document.querySelector('#loading-message') as HTMLDivElement;
 const loadingDetail = document.querySelector('#loading-detail') as HTMLDivElement;
@@ -74,35 +75,26 @@ const init = async () => {
 
 	loadingMessage.style.display = 'none';
 	loadingDetail.style.display = 'none';
-	if (mainAudioManager.context.state === "running" && !Util.isSafari()) {
-		// Start the game automatically if we already have audio autoplay permission.
-		start();
-		return;
-	}
+	start();
 
-	// Otherwise, we need user interaction to start audio.
+	// Connect to PartyKit multiplayer server (persistent across level loads)
+	let partyHost = window.location.hostname + ':7648';
+	mpConnection.connect(partyHost, 'marble-blast-room');
 
-	if (Util.isInFullscreen() || Util.isTouchDevice) {
-		// No need to tell them to enter fullscreen if they're already in it
-		startGameDialog.children[0].textContent = 'Click anywhere to start';
-		startGameDialog.children[1].textContent = '';
-	} else {
-		startGameDialog.children[0].textContent = `Press ${Util.isMac()? '^⌘F' : 'F11'} to start in fullscreen mode`;
-	}
-	startGameDialog.style.display = 'block';
-
-	window.addEventListener('mousedown', () => {
-		if (started) return;
-		start();
-	});
-	window.addEventListener('pointerdown', () => {
-		if (started) return;
-		start();
-	});
-	window.addEventListener('keydown', (e) => {
-		if (started) return;
-		if (e.code === 'F11' && !Util.isInFullscreen()) start();
-	});
+	// When the host changes level, load it on this client too
+	mpConnection.onLevelChange = async (missionPath: string, modification: string) => {
+		console.log(`[Multiplayer] Host changed level to: ${missionPath} (${modification})`);
+		let mission = MissionLibrary.allMissions.find(m => m.path === missionPath);
+		if (!mission) {
+			console.warn(`[Multiplayer] Mission not found: ${missionPath}`);
+			return;
+		}
+		// Switch modification if needed
+		if (state.modification !== modification && (modification === 'gold' || modification === 'platinum')) {
+			await setMenu(modification as 'gold' | 'platinum');
+		}
+		state.menu.loadingScreen.loadLevel(mission, undefined);
+	};
 };
 window.onload = init;
 

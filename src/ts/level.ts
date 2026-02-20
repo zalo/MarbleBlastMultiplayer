@@ -359,9 +359,8 @@ export class Level extends Scheduler {
 			this.lastPhysicsTick = performance.now(); // First render usually takes longer (JIT moment), so reset the last physics tick back to now
 			mainCanvas.classList.remove('hidden');
 
-			// Connect to PartyKit multiplayer server (same hostname as page, port 7648)
-			let partyHost = window.location.hostname + ':7648';
-			this.multiplayer.connect(partyHost, 'marble-blast-room');
+			// Notify multiplayer that the level has started
+			this.multiplayer.onLevelStart();
 		}
 	}
 
@@ -1653,12 +1652,18 @@ export class Level extends Scheduler {
 
 	/** Ends the level irreversibly. */
 	stop() {
+		this.softStop();
+		this.dispose();
+	}
+
+	/** Stops game loops and audio without disposing GPU resources. Used when switching levels. */
+	softStop() {
 		this.stopped = true;
 		clearInterval(this.tickInterval);
-		this.dispose();
+		if (this.multiplayer) this.multiplayer.dispose();
 		CollisionDetection.clearReferences();
 
-		this.music.stop();
+		this.music?.stop();
 		for (let interior of this.interiors) {
 			if (interior instanceof PathedInterior) interior.soundSource?.stop();
 		}
@@ -1666,13 +1671,13 @@ export class Level extends Scheduler {
 			if (shape instanceof Tornado || shape instanceof DuctFan) shape.soundSource?.stop();
 		}
 
-		this.marble.rollingSound?.stop();
-		this.marble.slidingSound?.stop();
-		this.marble.helicopterSound?.stop();
-		this.marble.shockAbsorberSound?.stop();
-		this.marble.superBounceSound?.stop();
+		this.marble?.rollingSound?.stop();
+		this.marble?.slidingSound?.stop();
+		this.marble?.helicopterSound?.stop();
+		this.marble?.shockAbsorberSound?.stop();
+		this.marble?.superBounceSound?.stop();
 
-		this.audio.stopAllAudio();
+		this.audio?.stopAllAudio();
 	}
 
 	/** Stops and destroys the current level and returns back to the menu. */

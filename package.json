@@ -10,7 +10,11 @@
 		"bundle": "node create_bundle.js",
 		"build": "npm run lint && npm run compile && npm run bundle",
 		"start": "node server/bundle.js",
-		"lint": "npx eslint src/ts/**/*.ts server/ts/**/*.ts"
+		"multiplayer": "npm run compile && node start-multiplayer.js",
+		"postinstall": "cd party && npm install",
+		"lint": "npx eslint src/ts/**/*.ts server/ts/**/*.ts",
+		"generate-api": "node generate-api.js",
+		"build:pages": "npm run generate-api && npm run compile"
 	},
 	"author": "Vanilagy",
 	"license": "ISC",

@@ -78,7 +78,9 @@ const init = async () => {
 	start();
 
 	// Connect to PartyKit multiplayer server (persistent across level loads)
-	let partyHost = window.location.hostname + ':7648';
+	let partyHost = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+		? window.location.hostname + ':7648'
+		: 'marble-blast-party.zalo.partykit.dev';
 	mpConnection.connect(partyHost, 'marble-blast-room');
 
 	// When the host changes level, load it on this client too

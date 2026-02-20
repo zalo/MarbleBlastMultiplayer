@@ -4,6 +4,9 @@ import { BestTimes, StorageManager } from "./storage";
 import { Util } from "./util";
 import { executeOnWorker } from "./worker";
 
+/** Whether we're running on a static host (no leaderboard server). */
+const isStaticHost = !(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
 /** Stores and handles operations on the online leaderboard. */
 export abstract class Leaderboard {
 	/** The scores for each mission. */
@@ -14,6 +17,7 @@ export abstract class Leaderboard {
 	static latestTimestamp: number = null;
 
 	static async init() {
+		if (isStaticHost) return;
 		// The first time we do this, the main purpose is to update the value of `latestTimestamp`.
 		await this.syncLeaderboard();
 	}
@@ -36,6 +40,7 @@ export abstract class Leaderboard {
 
 	/** Loads all scores for the given missions. */
 	static async loadForMissions(missionPaths: string[]) {
+		if (isStaticHost) return;
 		missionPaths = missionPaths.filter(x => !this.loading.has(x) && !this.scores.has(x)); // Filter out loaded or loading missions
 		if (missionPaths.length === 0) return;
 
@@ -81,6 +86,7 @@ export abstract class Leaderboard {
 
 	/** Synchronizes the leaderboard: Uploads new personal best times and gets all new/changed online scores and updates the leaderboard accordingly. */
 	static async syncLeaderboard() {
+		if (isStaticHost) return;
 		let queue = StorageManager.data.bestTimeSubmissionQueue;
 		let payloadScores: {
 			id: string,

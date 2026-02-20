@@ -122,7 +122,7 @@ const DEFAULT_STORAGE_DATA: StorageData = {
 		pixelRatio: 2,
 		inputType: 0,
 		frameRateCap: 7,
-		canvasDesynchronized: !/(CrOS)/.test(navigator.userAgent), // Turn it off when on ChromeOS (some people on Chromebooks have reported flickering)
+		canvasDesynchronized: !/(CrOS|Windows)/.test(navigator.userAgent), // Turn it off on ChromeOS and Windows (some GPUs/drivers cause flickering with desynchronized canvas)
 
 		joystickPosition: 0,
 		joystickSize: 250,

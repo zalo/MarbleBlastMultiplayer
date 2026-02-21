@@ -89,6 +89,8 @@ class MultiplayerConnection {
 	remotePlayers: Map<string, any> = new Map();
 	/** Callback for when a level change is received from the host. */
 	onLevelChange: (missionPath: string, modification: string) => void = null;
+	/** Callback for when the init message provides a current mission to auto-load. */
+	onCurrentMission: (missionPath: string, modification: string) => void = null;
 
 	connect(host: string, room: string) {
 		this.host = host;
@@ -172,9 +174,15 @@ class MultiplayerConnection {
 					if (id !== this.myId) this.remotePlayers.set(id, player);
 				}
 				console.log(`[Multiplayer] Initialized as ${this.isHost ? 'HOST' : 'client'}, id: ${this.myId}`);
+				this.updateGlobalPlayerList();
+				// Auto-load the host's current level if provided
+				if (msg.currentMission && this.onCurrentMission) {
+					this.onCurrentMission(msg.currentMission.path, msg.currentMission.modification);
+				}
 				break;
 			case 'player_joined':
 				if (msg.id !== this.myId) this.remotePlayers.set(msg.id, msg.player);
+				this.updateGlobalPlayerList();
 				break;
 			case 'player_update':
 				if (this.remotePlayers.has(msg.id)) {
@@ -187,6 +195,7 @@ class MultiplayerConnection {
 				break;
 			case 'player_left':
 				this.remotePlayers.delete(msg.id);
+				this.updateGlobalPlayerList();
 				break;
 			case 'level_change':
 				if (this.onLevelChange) {
@@ -197,11 +206,13 @@ class MultiplayerConnection {
 				if (this.remotePlayers.has(msg.id)) {
 					this.remotePlayers.get(msg.id).name = msg.name;
 				}
+				this.updateGlobalPlayerList();
 				break;
 			case 'host_changed':
 				this.hostId = msg.id;
 				this.isHost = (msg.id === this.myId);
 				console.log(`[Multiplayer] Host changed to ${msg.id}${this.isHost ? ' (you)' : ''}`);
+				this.updateGlobalPlayerList();
 				break;
 		}
 
@@ -219,6 +230,87 @@ class MultiplayerConnection {
 	/** Tell the server (and all other clients) to load a new level. Only works for the host. */
 	sendLevelChange(missionPath: string, modification: string) {
 		this.send({ type: 'level_change', missionPath, modification });
+	}
+
+	/** Update the always-visible player list (works even outside gameplay). */
+	updateGlobalPlayerList() {
+		let listDiv = document.getElementById('mp-player-list');
+		let container = document.getElementById('mp-player-list-entries');
+		if (!listDiv || !container) return;
+
+		// Show/hide the player list based on connection state
+		if (!this.connected) {
+			listDiv.classList.add('hidden');
+			return;
+		}
+		listDiv.classList.remove('hidden');
+
+		container.innerHTML = '';
+
+		// Local player
+		let selfEntry = document.createElement('div');
+		selfEntry.className = 'mp-player-entry';
+
+		let selfDot = document.createElement('span');
+		selfDot.className = 'mp-player-dot online';
+		selfEntry.appendChild(selfDot);
+
+		let selfName = document.createElement('span');
+		selfName.className = 'mp-player-name you';
+		selfName.textContent = this.myName + (this.isHost ? ' (Host)' : '');
+		selfName.addEventListener('click', () => {
+			let input = document.createElement('input');
+			input.type = 'text';
+			input.className = 'mp-player-name-input';
+			input.value = this.myName;
+			input.maxLength = 20;
+			selfName.replaceWith(input);
+			input.focus();
+			input.select();
+
+			let commit = () => {
+				let newName = input.value.trim() || 'Player';
+				this.myName = newName;
+				localStorage.setItem('mp-player-name', newName);
+				this.send({ type: 'set_name', name: newName });
+				this.updateGlobalPlayerList();
+			};
+			input.addEventListener('keydown', (e) => {
+				if (e.key === 'Enter') { e.preventDefault(); commit(); }
+				if (e.key === 'Escape') { e.preventDefault(); this.updateGlobalPlayerList(); }
+			});
+			input.addEventListener('blur', commit);
+		});
+		selfEntry.appendChild(selfName);
+		container.appendChild(selfEntry);
+
+		// Remote players
+		for (let [id, remote] of this.remotePlayers) {
+			let name = remote.name || GHOST_NAMES[Array.from(this.remotePlayers.keys()).indexOf(id)] || `Player ${Array.from(this.remotePlayers.keys()).indexOf(id) + 2}`;
+			let isRemoteHost = (id === this.hostId);
+			let entry = document.createElement('div');
+			entry.className = 'mp-player-entry';
+
+			let dot = document.createElement('span');
+			dot.className = 'mp-player-dot online';
+			entry.appendChild(dot);
+
+			let nameSpan = document.createElement('span');
+			nameSpan.className = 'mp-player-name';
+			nameSpan.textContent = name + (isRemoteHost ? ' (Host)' : '');
+			entry.appendChild(nameSpan);
+
+			container.appendChild(entry);
+		}
+
+		// Take Host button
+		let takeHostBtn = document.createElement('button');
+		takeHostBtn.id = 'mp-take-host';
+		takeHostBtn.textContent = 'Take Host';
+		takeHostBtn.addEventListener('click', () => {
+			this.send({ type: 'take_host' });
+		});
+		container.appendChild(takeHostBtn);
 	}
 }
 
@@ -619,78 +711,9 @@ export class Multiplayer {
 		this.applyLocalSkin(this.mySkinIndex);
 	}
 
-	/** Update the player list UI. */
+	/** Update the player list UI — delegates to the global connection-level list. */
 	private updatePlayerList() {
-		let container = document.getElementById('mp-player-list-entries');
-		if (!container) return;
-
-		container.innerHTML = '';
-
-		// Local player entry with click-to-edit name
-		let selfEntry = document.createElement('div');
-		selfEntry.className = 'mp-player-entry';
-
-		let selfDot = document.createElement('span');
-		selfDot.className = `mp-player-dot ${mpConnection.connected ? 'online' : 'offline'}`;
-		selfEntry.appendChild(selfDot);
-
-		let selfName = document.createElement('span');
-		selfName.className = 'mp-player-name you';
-		selfName.textContent = mpConnection.myName + (mpConnection.isHost ? ' (Host)' : '');
-		selfName.addEventListener('click', () => {
-			// Replace span with input for editing
-			let input = document.createElement('input');
-			input.type = 'text';
-			input.className = 'mp-player-name-input';
-			input.value = mpConnection.myName;
-			input.maxLength = 20;
-			selfName.replaceWith(input);
-			input.focus();
-			input.select();
-
-			let commit = () => {
-				let newName = input.value.trim() || 'Player';
-				mpConnection.myName = newName;
-				localStorage.setItem('mp-player-name', newName);
-				mpConnection.send({ type: 'set_name', name: newName });
-				this.updatePlayerList();
-			};
-			input.addEventListener('keydown', (e) => {
-				if (e.key === 'Enter') { e.preventDefault(); commit(); }
-				if (e.key === 'Escape') { e.preventDefault(); this.updatePlayerList(); }
-			});
-			input.addEventListener('blur', commit);
-		});
-		selfEntry.appendChild(selfName);
-		container.appendChild(selfEntry);
-
-		// Remote player entries
-		for (let [id, remote] of this.remotePlayers) {
-			let name = remote.name || GHOST_NAMES[remote.ghostIndex] || `Player ${remote.ghostIndex + 2}`;
-			let isRemoteHost = (id === mpConnection.hostId);
-			let entry = document.createElement('div');
-			entry.className = 'mp-player-entry';
-
-			let dot = document.createElement('span');
-			dot.className = 'mp-player-dot online';
-			entry.appendChild(dot);
-
-			let nameSpan = document.createElement('span');
-			nameSpan.className = 'mp-player-name';
-			nameSpan.textContent = name + (isRemoteHost ? ' (Host)' : '');
-			entry.appendChild(nameSpan);
-
-			container.appendChild(entry);
-		}
-
-		// Take Host button
-		let takeHostBtn = document.createElement('button');
-		takeHostBtn.id = 'mp-take-host';
-		takeHostBtn.textContent = 'Take Host';
-		takeHostBtn.addEventListener('click', () => {
-			mpConnection.send({ type: 'take_host' });
-		});
-		container.appendChild(takeHostBtn);
+		mpConnection.updateGlobalPlayerList();
 	}
 
 	/** Clean up on level exit. Does NOT close the WebSocket (connection persists). */

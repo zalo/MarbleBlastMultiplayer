@@ -252,7 +252,10 @@ export abstract class LevelSelect {
 
 	playCurrentMission(getReplayData?: Promise<ArrayBuffer>) {
 		if (!this.currentMission) return;
-		if (mpConnection.connected && !mpConnection.isHost) return;
+		if (mpConnection.connected && !mpConnection.isHost) {
+			state.menu.showAlertPopup('Not Host', 'Only the host can select levels.');
+			return;
+		}
 
 		this.div.classList.add('hidden');
 		// Initiate level loading

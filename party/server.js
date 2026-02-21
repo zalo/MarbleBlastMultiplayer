@@ -24,6 +24,9 @@ export default class MarblePartyServer {
 
     /** The connection ID of the host (first player to connect). */
     this.hostId = null;
+
+    /** The current mission that all players should be on. */
+    this.currentMission = null;
   }
 
   onConnect(conn) {
@@ -46,7 +49,8 @@ export default class MarblePartyServer {
       id: conn.id,
       isHost: conn.id === this.hostId,
       hostId: this.hostId,
-      players: this.players
+      players: this.players,
+      currentMission: this.currentMission
     }));
 
     // Tell everyone else about the new player
@@ -110,6 +114,9 @@ export default class MarblePartyServer {
     if (data.type === 'level_change') {
       // Only the host can change levels for everyone
       if (sender.id !== this.hostId) return;
+
+      // Persist the current mission so late joiners get it
+      this.currentMission = { path: data.missionPath, modification: data.modification };
 
       // Broadcast level change to all OTHER players (host already loaded it)
       this.room.broadcast(JSON.stringify({

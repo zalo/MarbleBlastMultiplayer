@@ -1,5 +1,6 @@
-import { state } from "../state";
 import { Level } from "../level";
+import { mpConnection } from "../multiplayer";
+import { state } from "../state";
 import { Util } from "../util";
 import { Replay } from "../replay";
 import { Mission } from "../mission";
@@ -20,9 +21,13 @@ export abstract class LoadingScreen {
 		this.initProperties();
 
 		menu.setupButton(this.cancelButton, 'loading/cancel', () => {
-			// Cancel the loading progress and return to level select
+			// Cancel the loading progress and return
 			this.hide();
-			menu.levelSelect.show();
+			if (mpConnection.connected && !mpConnection.isHost) {
+				menu.home.show();
+			} else {
+				menu.levelSelect.show();
+			}
 			this.loadingIndex++;
 			clearInterval(this.refresher);
 		});

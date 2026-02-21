@@ -72,7 +72,7 @@ import { OrthographicCamera, PerspectiveCamera } from "./rendering/camera";
 import { Plane } from "./math/plane";
 import { CollisionDetection } from "./physics/collision_detection";
 import { MissionLibrary } from "./mission_library";
-import { Multiplayer } from "./multiplayer";
+import { Multiplayer, mpConnection } from "./multiplayer";
 import hxDif from './parsing/hx_dif';
 
 /** How often the physics will be updated, per second. */
@@ -1687,10 +1687,16 @@ export class Level extends Scheduler {
 		mainCanvas.classList.add('hidden');
 
 		state.menu.pauseScreen.hide();
-		state.menu.levelSelect.show();
-		state.menu.levelSelect.displayBestTimes(); // Potentially update best times having changed
 		state.menu.finishScreen.hide();
 		state.menu.hideGameUi();
+
+		// Non-hosts in multiplayer should not see level select — just show home
+		if (mpConnection.connected && !mpConnection.isHost) {
+			state.menu.home.show();
+		} else {
+			state.menu.levelSelect.show();
+			state.menu.levelSelect.displayBestTimes();
+		}
 		state.menu.show();
 
 		document.exitPointerLock?.();

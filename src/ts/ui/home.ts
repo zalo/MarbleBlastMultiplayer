@@ -1,4 +1,5 @@
 import { Leaderboard } from "../leaderboard";
+import { mpConnection } from "../multiplayer";
 import { ResourceManager } from "../resources";
 import { state } from "../state";
 import { StorageManager } from "../storage";
@@ -30,6 +31,10 @@ export abstract class HomeScreen {
 		this.initProperties();
 
 		menu.setupButton(this.playButton, this.playSrc, () => {
+			if (mpConnection.connected && !mpConnection.isHost) {
+				state.menu.showAlertPopup('Not Host', 'Only the host can select levels. Use the "Take Host" button in the player list first.');
+				return;
+			}
 			// Show the level select
 			this.hide();
 			menu.levelSelect.show();

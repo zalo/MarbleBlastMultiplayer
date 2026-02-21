@@ -83,9 +83,8 @@ const init = async () => {
 		: 'marble-blast-party.zalo.partykit.dev';
 	mpConnection.connect(partyHost, 'marble-blast-room');
 
-	// When the host changes level, load it on this client too
-	mpConnection.onLevelChange = async (missionPath: string, modification: string) => {
-		console.log(`[Multiplayer] Host changed level to: ${missionPath} (${modification})`);
+	/** Shared logic for loading a level by mission path/modification (used for both level_change and late-join). */
+	const loadMissionByPath = async (missionPath: string, modification: string) => {
 		let mission = MissionLibrary.allMissions.find(m => m.path === missionPath);
 		if (!mission) {
 			console.warn(`[Multiplayer] Mission not found: ${missionPath}`);
@@ -96,6 +95,18 @@ const init = async () => {
 			await setMenu(modification as 'gold' | 'platinum');
 		}
 		state.menu.loadingScreen.loadLevel(mission, undefined);
+	};
+
+	// When the host changes level, load it on this client too
+	mpConnection.onLevelChange = async (missionPath: string, modification: string) => {
+		console.log(`[Multiplayer] Host changed level to: ${missionPath} (${modification})`);
+		await loadMissionByPath(missionPath, modification);
+	};
+
+	// When connecting/reconnecting and the server has a current mission, auto-load it
+	mpConnection.onCurrentMission = async (missionPath: string, modification: string) => {
+		console.log(`[Multiplayer] Server has active mission: ${missionPath} (${modification})`);
+		await loadMissionByPath(missionPath, modification);
 	};
 };
 window.onload = init;
@@ -123,8 +134,10 @@ const maybeLaunchLevelFromQueryParams = async (urlParams: URLSearchParams) => {
 	state.menu.loadingScreen.loadLevel(missionToPlay, undefined);
 };
 
-/** Auto-start the first beginner level, skipping all menus */
+/** Auto-start the first beginner level, skipping all menus (host only — non-hosts wait for the server's current mission). */
 const autoStartFirstLevel = async () => {
+	// Non-hosts will receive the current mission from the server via onCurrentMission
+	// so we only auto-start for the host (or solo play before connection)
 	let missionToPlay = MissionLibrary.goldBeginner[0];
 	if (!missionToPlay) return;
 

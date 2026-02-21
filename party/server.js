@@ -36,7 +36,8 @@ export default class MarblePartyServer {
       position: { x: 0, y: 0, z: 0 },
       orientation: { x: 0, y: 0, z: 0, w: 1 },
       velocity: { x: 0, y: 0, z: 0 },
-      skinIndex: 0
+      skinIndex: 0,
+      name: null
     };
 
     // Send the new player their ID, host status, and the current state of all players
@@ -44,6 +45,7 @@ export default class MarblePartyServer {
       type: 'init',
       id: conn.id,
       isHost: conn.id === this.hostId,
+      hostId: this.hostId,
       players: this.players
     }));
 
@@ -83,6 +85,26 @@ export default class MarblePartyServer {
         velocity: player.velocity,
         skinIndex: player.skinIndex
       }), [sender.id]);
+    }
+
+    if (data.type === 'set_name') {
+      const player = this.players[sender.id];
+      if (!player) return;
+      const name = String(data.name || '').slice(0, 20);
+      player.name = name;
+      this.room.broadcast(JSON.stringify({
+        type: 'player_name',
+        id: sender.id,
+        name
+      }), [sender.id]);
+    }
+
+    if (data.type === 'take_host') {
+      this.hostId = sender.id;
+      this.room.broadcast(JSON.stringify({
+        type: 'host_changed',
+        id: sender.id
+      }));
     }
 
     if (data.type === 'level_change') {
@@ -168,14 +190,12 @@ export default class MarblePartyServer {
       const remaining = Object.keys(this.players);
       this.hostId = remaining.length > 0 ? remaining[0] : null;
 
-      // Notify the new host
+      // Notify everyone about the new host
       if (this.hostId) {
-        for (const other of this.room.getConnections()) {
-          if (other.id === this.hostId) {
-            other.send(JSON.stringify({ type: 'host_promoted' }));
-            break;
-          }
-        }
+        this.room.broadcast(JSON.stringify({
+          type: 'host_changed',
+          id: this.hostId
+        }));
       }
     }
 

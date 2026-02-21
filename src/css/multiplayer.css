@@ -57,6 +57,40 @@
 
 .mp-player-name.you {
 	font-weight: bold;
+	pointer-events: auto;
+	cursor: pointer;
+}
+
+.mp-player-name-input {
+	background: rgba(255, 255, 255, 0.1);
+	border: 1px solid rgba(255, 255, 255, 0.3);
+	border-radius: 4px;
+	color: #fff;
+	font-family: Arial, sans-serif;
+	font-size: 13px;
+	padding: 1px 4px;
+	width: 100px;
+	outline: none;
+	pointer-events: auto;
+}
+
+#mp-take-host {
+	pointer-events: auto;
+	cursor: pointer;
+	margin-top: 6px;
+	background: rgba(255, 255, 255, 0.1);
+	color: rgba(255, 255, 255, 0.6);
+	border: none;
+	border-radius: 4px;
+	padding: 4px 10px;
+	font-family: Arial, sans-serif;
+	font-size: 11px;
+	width: 100%;
+}
+
+#mp-take-host:hover {
+	background: rgba(255, 255, 255, 0.2);
+	color: #fff;
 }
 
 /* Console toggle button - bottom left */

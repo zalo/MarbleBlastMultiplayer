@@ -90,9 +90,10 @@ const init = async () => {
 			console.warn(`[Multiplayer] Mission not found: ${missionPath}`);
 			return;
 		}
-		// Switch modification if needed
-		if (state.modification !== modification && (modification === 'gold' || modification === 'platinum')) {
-			await setMenu(modification as 'gold' | 'platinum');
+		// Switch modification if needed — ultra levels use the platinum menu
+		let menuType: 'gold' | 'platinum' = (modification === 'gold') ? 'gold' : 'platinum';
+		if (state.modification !== menuType) {
+			await setMenu(menuType);
 		}
 		state.menu.loadingScreen.loadLevel(mission, undefined);
 	};

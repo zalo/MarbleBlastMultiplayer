@@ -68,20 +68,13 @@ const init = async () => {
 		startGameDialog.style.display = 'none';
 		mainAudioManager.context.resume();
 		state.menu.show();
-
-		// Auto-start the first beginner level, skipping menus
-		autoStartFirstLevel();
+		// Don't auto-start a level here — wait for multiplayer init
+		// so non-hosts load the server's current mission instead.
 	};
 
 	loadingMessage.style.display = 'none';
 	loadingDetail.style.display = 'none';
 	start();
-
-	// Connect to PartyKit multiplayer server (persistent across level loads)
-	let partyHost = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-		? window.location.hostname + ':7648'
-		: 'marble-blast-party.zalo.partykit.dev';
-	mpConnection.connect(partyHost, 'marble-blast-room');
 
 	/** Shared logic for loading a level by mission path/modification (used for both level_change and late-join). */
 	const loadMissionByPath = async (missionPath: string, modification: string) => {
@@ -95,8 +88,18 @@ const init = async () => {
 		if (state.modification !== menuType) {
 			await setMenu(menuType);
 		}
+		// Hide any visible menu screens so the loading screen is on top
+		state.menu.home.hide();
+		state.menu.home.changelogContainer?.classList.add('hidden');
+		state.menu.pauseScreen.hide();
+		state.menu.finishScreen.hide();
 		state.menu.loadingScreen.loadLevel(mission, undefined);
 	};
+
+	// Connect to PartyKit multiplayer server (persistent across level loads)
+	let partyHost = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+		? window.location.hostname + ':7648'
+		: 'marble-blast-party.zalo.partykit.dev';
 
 	// When the host changes level, load it on this client too
 	mpConnection.onLevelChange = async (missionPath: string, modification: string) => {
@@ -109,6 +112,15 @@ const init = async () => {
 		console.log(`[Multiplayer] Server has active mission: ${missionPath} (${modification})`);
 		await loadMissionByPath(missionPath, modification);
 	};
+
+	// When init completes and we're host with no current mission, auto-start first level
+	mpConnection.onInit = () => {
+		if (mpConnection.isHost) {
+			autoStartFirstLevel();
+		}
+	};
+
+	mpConnection.connect(partyHost, 'marble-blast-room');
 };
 window.onload = init;
 

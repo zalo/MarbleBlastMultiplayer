@@ -91,6 +91,8 @@ class MultiplayerConnection {
 	onLevelChange: (missionPath: string, modification: string) => void = null;
 	/** Callback for when the init message provides a current mission to auto-load. */
 	onCurrentMission: (missionPath: string, modification: string) => void = null;
+	/** Callback for when the init message has been fully processed. */
+	onInit: () => void = null;
 
 	connect(host: string, room: string) {
 		this.host = host;
@@ -179,6 +181,7 @@ class MultiplayerConnection {
 				if (msg.currentMission && this.onCurrentMission) {
 					this.onCurrentMission(msg.currentMission.path, msg.currentMission.modification);
 				}
+				if (this.onInit) this.onInit();
 				break;
 			case 'player_joined':
 				if (msg.id !== this.myId) this.remotePlayers.set(msg.id, msg.player);

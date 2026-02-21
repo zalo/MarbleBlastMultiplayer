@@ -41,7 +41,9 @@ export abstract class PauseScreen {
 			if (e.key === 'Escape') {
 				if (state.level.paused) {
 					if (!this.preventClose) this.noButton.src = menu.uiAssetPath + this.noSrc + '_d.png';
-				} else {
+				} else if (!document.pointerLockElement) {
+					// Only pause if pointer lock is already released (second ESC press).
+					// First ESC just releases the mouse cursor via the browser.
 					state.level.pause();
 				}
 			} else if (e.code === StorageManager.data.settings.gameButtonMapping.restart && state.level.paused) {

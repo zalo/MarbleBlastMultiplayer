@@ -100,8 +100,8 @@ window.addEventListener('beforeunload', (e) => {
 });
 
 document.addEventListener('pointerlockchange', () => {
-	// When pointer lock is left, we pause.
-	if (!document.pointerLockElement) state.level?.pause();
+	// When pointer lock is lost, don't auto-pause.
+	// The player needs to press ESC a second time to open the pause menu.
 });
 
 /** For each game button, a list of the keys/buttons corresponding to it that are currently pressed. */

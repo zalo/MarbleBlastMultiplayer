@@ -65,6 +65,7 @@ export class Renderer {
 		this.options = options;
 		let ctxOptions = {
 			desynchronized: options.desynchronized, // This option can drastically reduce visual latency
+			preserveDrawingBuffer: true, // Prevent blank frames during skipped renders (frame rate cap)
 			depth: true,
 			stencil: true, // Maybe this will get us a 24-bit depth buffer
 			antialias: false,

@@ -60,6 +60,11 @@ export abstract class FinishScreen {
 
 			// Store the time and close the dialog.
 			let level = state.level;
+			if (!level || !level.finishTime) {
+				this.nameEntryScreenDiv.classList.add('hidden');
+				this.div.style.pointerEvents = '';
+				return;
+			}
 			let inserted = StorageManager.insertNewTime(level.mission.path, trimmed, level.finishTime.gameplayClock);
 
 			this.nameEntryScreenDiv.classList.add('hidden');
@@ -123,6 +128,7 @@ export abstract class FinishScreen {
 
 	show() {
 		let level = state.level;
+		if (!level || !level.finishTime) return;
 		this.div.classList.remove('hidden');
 
 		let elapsedTime = Math.max(level.finishTime.currentAttemptTime - GO_TIME, 0);

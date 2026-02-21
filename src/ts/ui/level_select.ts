@@ -9,6 +9,7 @@ import { Leaderboard } from "../leaderboard";
 import { Menu } from "./menu";
 import { MissionLibrary } from "../mission_library";
 import { state } from "../state";
+import { mpConnection } from "../multiplayer";
 import { VideoRenderer } from "./video_renderer";
 
 export abstract class LevelSelect {
@@ -251,6 +252,7 @@ export abstract class LevelSelect {
 
 	playCurrentMission(getReplayData?: Promise<ArrayBuffer>) {
 		if (!this.currentMission) return;
+		if (mpConnection.connected && !mpConnection.isHost) return;
 
 		this.div.classList.add('hidden');
 		// Initiate level loading

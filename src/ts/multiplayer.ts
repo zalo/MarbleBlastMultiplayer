@@ -13,6 +13,8 @@ import { state } from "./state";
 
 const MAX_REMOTE_PLAYERS = 8;
 const SEND_RATE_MS = 1000 / 30; // 30 Hz position updates
+const DEFAULT_RADIUS = 0.2;
+const ULTRA_RADIUS = 0.3;
 
 /** All available skin textures that can be chosen. Pre-loaded before scene compile. */
 const ALL_SKINS = [
@@ -271,7 +273,8 @@ export class Multiplayer {
 			mesh.castShadows = true;
 			innerGroup.add(mesh);
 
-			group.scale.setScalar(0.2);
+			let radius = this.level.mission.hasUltraMarble ? ULTRA_RADIUS : DEFAULT_RADIUS;
+			group.scale.setScalar(radius);
 			group.position.set(0, 0, -1000);
 			group.recomputeTransform();
 			innerGroup.recomputeTransform();
@@ -544,7 +547,7 @@ export class Multiplayer {
 			if (len > 0) { rx /= len; ry /= len; rz /= len; rw /= len; }
 
 			ghost.innerGroup.orientation.set(rx, ry, rz, rw);
-			ghost.group.scale.setScalar(0.2);
+			ghost.group.scale.setScalar(this.level.mission.hasUltraMarble ? ULTRA_RADIUS : DEFAULT_RADIUS);
 			ghost.group.recomputeTransform();
 			ghost.innerGroup.recomputeTransform();
 		}

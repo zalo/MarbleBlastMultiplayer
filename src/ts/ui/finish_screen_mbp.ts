@@ -1,4 +1,5 @@
 import { MissionLibrary } from "../mission_library";
+import { mpConnection } from "../multiplayer";
 import { state } from "../state";
 import { BestTimes } from "../storage";
 import { Util } from "../util";
@@ -59,6 +60,8 @@ export class MbpFinishScreen extends FinishScreen {
 		this.elapsedTimeElement.parentElement.style.marginTop = '20px';
 
 		menu.setupButton(this.nextLevelButton, 'endgame/level_window', () => {
+			if (mpConnection.connected && !mpConnection.isHost) return;
+
 			let nextLevel = this.getNextLevel();
 			let levelSelect = state.menu.levelSelect;
 
